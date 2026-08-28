@@ -1,0 +1,4 @@
+internal\server\server.go:20:2: missing go.sum entry for module providing package github.com/gorilla/websocket (imported by github.com/toyfer/browser-console-go/internal/server); to add:
+	go get github.com/toyfer/browser-console-go/internal/server
+internal\pty\session_windows.go:9:2: missing go.sum entry for module providing package github.com/UserExistsError/conpty (imported by github.com/toyfer/browser-console-go/internal/pty); to add:
+	go get github.com/toyfer/browser-console-go/internal/pty
