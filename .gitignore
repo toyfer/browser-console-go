@@ -1,0 +1,10 @@
+/browser-console.exe
+/browser-console
+/dist/
+*.log
+.DS_Store
+.env
+.env.*
+.idea/
+.vscode/
+*.zip
