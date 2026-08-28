@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/**]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.22.10"
+
+jobs:
+  test:
+    name: Test (linux, no ConPTY)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Go test (portable packages)
+        run: |
+          go test ./internal/config ./internal/winquote ./internal/ui -count=1 -v | tee test.log
+      - name: Vet
+        run: go vet ./internal/config ./internal/winquote ./internal/ui ./internal/server
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-log
+          path: test.log
+          if-no-files-found: ignore
+
+  build:
+    name: Build Windows exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Vendor xterm
+        shell: pwsh
+        run: .\scripts\vendor-xterm.ps1
+      - name: Go test on Windows
+        shell: pwsh
+        run: |
+          go test ./... -count=1 -v 2>&1 | Tee-Object -FilePath build-test.log
+      - name: Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $ver = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "dev" }
+          $sha = $env:GITHUB_SHA.Substring(0, 7)
+          go build -trimpath -ldflags "-s -w -X main.version=$ver -X main.commit=$sha" `
+            -o dist/browser-console.exe ./cmd/browser-console
+          $exe = Get-Item dist/browser-console.exe
+          Write-Host "exe: $($exe.Length) bytes"
+          if ($exe.Length -lt 2000000) { throw "exe unexpectedly small" }
+          Copy-Item shell.json dist/shell.json
+          Copy-Item README.md, LICENSE dist/ -ErrorAction SilentlyContinue
+          Get-FileHash dist/browser-console.exe -Algorithm SHA256 | Format-List | Tee-Object -FilePath dist/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-x64
+          path: |
+            dist/browser-console.exe
+            dist/shell.json
+            dist/SHA256.txt
+            dist/README.md
+            dist/LICENSE
+            build-test.log
+          if-no-files-found: error
+
+  publish-ci-status:
+    name: Publish logs to ci-status branch
+    needs: [test, build]
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Push snapshot to ci-status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ github.run_id }}"
+          SHA="${{ github.sha }}"
+          REF="${{ github.ref_name }}"
+          RESULT="${{ needs.build.result }} / test=${{ needs.test.result }}"
+          STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          DEST="runs/${RUN_ID}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin ci-status 2>/dev/null || true
+          if git show-ref --verify --quiet refs/remotes/origin/ci-status; then
+            git checkout -B ci-status origin/ci-status
+          else
+            git checkout --orphan ci-status
+            git rm -rf --quiet . 2>/dev/null || true
+            echo "# CI status snapshots" > README.md
+            echo "GitHub MCP can read this branch with get_file_contents." >> README.md
+            git add README.md
+            git commit -m "chore: init ci-status" || true
+          fi
+
+          mkdir -p "$DEST"
+          {
+            echo "# run $RUN_ID"
+            echo
+            echo "- time: $STAMP"
+            echo "- ref: $REF"
+            echo "- sha: $SHA"
+            echo "- result: $RESULT"
+            echo "- actions: https://github.com/${{ github.repository }}/actions/runs/$RUN_ID"
+            echo
+            echo "## artifacts"
+            find artifacts -type f | sort | sed 's|^|- |'
+          } > "$DEST/summary.md"
+
+          find artifacts -type f -name '*.log' -exec cp -v {} "$DEST/" \; || true
+          find artifacts -type f -name 'SHA256.txt' -exec cp -v {} "$DEST/" \; || true
+
+          git add "$DEST"
+          git commit -m "ci: ${REF} ${SHA:0:7} ${RESULT}" || echo "no changes"
+          git push origin ci-status
