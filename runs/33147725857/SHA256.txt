@@ -1,0 +1,5 @@
+
+Algorithm : SHA256
+Hash      : 5D4216A93DC607AC1DBDFA7D91ABAAB3193D0A7069D948A824F05BF378C094E6
+Path      : D:\a\browser-console-go\browser-console-go\dist\browser-console.exe
+
