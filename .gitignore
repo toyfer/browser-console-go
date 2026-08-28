@@ -1,0 +1,12 @@
+/browser-console.exe
+/browser-console
+/dist/
+*.log
+.DS_Store
+.env
+.env.*
+.idea/
+.vscode/
+*.zip
+cmd/browser-console/web/vendor/*.js
+cmd/browser-console/web/vendor/*.css

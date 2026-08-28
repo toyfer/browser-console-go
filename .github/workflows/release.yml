@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.22.10"
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Resolve modules
+        shell: pwsh
+        run: |
+          go get github.com/gorilla/websocket@v1.5.3
+          go get github.com/UserExistsError/conpty@aff362cbe133d2e0818f6eeaffd66c84957a0cf1
+          go mod download
+      - name: Vendor xterm
+        shell: pwsh
+        run: .\scripts\vendor-xterm.ps1
+      - name: Test
+        shell: pwsh
+        run: go test ./... -count=1
+      - name: Build zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "${{ github.event.inputs.tag }}" }
+          if (-not $tag) { $tag = "dev" }
+          $sha = $env:GITHUB_SHA.Substring(0, 7)
+          New-Item -ItemType Directory -Force -Path dist/pkg | Out-Null
+          go build -trimpath -ldflags "-s -w -X main.version=$tag -X main.commit=$sha" `
+            -o dist/pkg/browser-console.exe ./cmd/browser-console
+          Copy-Item shell.json dist/pkg/
+          Copy-Item README.md, LICENSE dist/pkg/ -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path dist/release | Out-Null
+          Compress-Archive -Path dist/pkg/* -DestinationPath dist/release/browser-console-windows-x64.zip -Force
+          Get-FileHash dist/release/browser-console-windows-x64.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  browser-console-windows-x64.zip" } |
+            Set-Content dist/release/SHA256SUMS.txt
+          Get-ChildItem dist/release | Format-Table Name, Length
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: dist/release/*
+          if-no-files-found: error
+
+  publish:
+    name: GitHub Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows-x64
+          path: release-assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Browser Console (Go) ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/browser-console-windows-x64.zip
+            release-assets/SHA256SUMS.txt
+          body: |
+            Single Windows x64 binary. Unpack, keep `shell.json` next to `browser-console.exe`.
+
+            Air-gapped after download. xterm.js is embedded. ConPTY is the OS API (Windows 10 1809+).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

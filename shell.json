@@ -1,0 +1,25 @@
+{
+  "shell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+  "shellArgs": ["-NoLogo", "-NoExit"],
+  "cwd": null,
+  "env": {
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "openBrowser": true
+  },
+  "pty": {
+    "cols": 120,
+    "rows": 30
+  },
+  "ui": {
+    "fontFamily": "Consolas, Cascadia Mono, MS Gothic, BIZ UDGothic, monospace",
+    "fontSize": 15,
+    "fontWeight": "normal",
+    "lineHeight": 1.0,
+    "theme": "dark"
+  }
+}
