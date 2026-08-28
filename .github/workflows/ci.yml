@@ -33,7 +33,7 @@ jobs:
           go test ./internal/config ./internal/winquote ./internal/ui ./internal/server -count=1 -v | tee test.log
       - name: Vet
         run: go vet ./internal/config ./internal/winquote ./internal/ui ./internal/server
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: test-log
@@ -74,7 +74,7 @@ jobs:
           Copy-Item shell.json dist/shell.json
           Copy-Item README.md, LICENSE dist/ -ErrorAction SilentlyContinue
           Get-FileHash dist/browser-console.exe -Algorithm SHA256 | Format-List | Tee-Object -FilePath dist/SHA256.txt
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: windows-x64
@@ -97,7 +97,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Download artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
       - name: Push snapshot to ci-status

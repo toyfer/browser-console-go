@@ -58,7 +58,7 @@ jobs:
             ForEach-Object { "$($_.Hash.ToLower())  browser-console-windows-x64.zip" } |
             Set-Content dist/release/SHA256SUMS.txt
           Get-ChildItem dist/release | Format-Table Name, Length
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: release-windows-x64
           path: dist/release/*
@@ -71,7 +71,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v7
         with:
           name: release-windows-x64
           path: release-assets
