@@ -1,5 +1,6 @@
-// Package keepdeps exists so `go mod tidy` on Linux still pins
-// the Windows-only ConPTY module. It is not imported by the binary.
-package keepdeps
+//go:build tools
 
+package tools
+
+// Keep the Windows-only ConPTY module in go.mod when tidying on Linux.
 import _ "github.com/UserExistsError/conpty"
