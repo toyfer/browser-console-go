@@ -137,13 +137,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":     "ok",
-		"pid":        os.Getpid(),
-		"pty":        true,
-		"backend":    "conpty",
-		"sessions":   s.active.Load(),
+		"status":      "ok",
+		"pid":         os.Getpid(),
+		"pty":         true,
+		"backend":     "conpty",
+		"sessions":    s.active.Load(),
 		"maxSessions": maxSessions,
-		"goos":       runtime.GOOS,
+		"goos":        runtime.GOOS,
 	})
 }
 
@@ -153,22 +153,35 @@ func (s *Server) handleUI(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(s.cfg.PublicUI())
 }
 
+type wsConn struct {
+	mu   sync.Mutex
+	conn *websocket.Conn
+}
+
+func (c *wsConn) json(v any) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	return c.conn.WriteJSON(v)
+}
+
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if s.active.Load() >= maxSessions {
 		http.Error(w, "too many sessions", http.StatusTooManyRequests)
 		return
 	}
-	conn, err := s.upgrader.Upgrade(w, r, nil)
+	rawConn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[ws] upgrade: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer rawConn.Close()
+	conn := &wsConn{conn: rawConn}
 
 	p, err := pty.Start(s.cfg)
 	if err != nil {
 		log.Printf("[pty] start: %v", err)
-		_ = conn.WriteJSON(map[string]any{"type": "exit", "code": 1, "error": err.Error()})
+		_ = conn.json(map[string]any{"type": "exit", "code": 1, "error": err.Error()})
 		return
 	}
 	sess := &session{pty: p}
@@ -185,7 +198,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	log.Printf("[pty] spawned pid=%d sessions=%d", p.Pid(), s.active.Load())
-	_ = conn.WriteJSON(map[string]any{
+	_ = conn.json(map[string]any{
 		"type":    "connected",
 		"pid":     p.Pid(),
 		"pty":     true,
@@ -194,8 +207,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	})
 
 	done := make(chan struct{})
-var once sync.Once
-	closeDone := func() { once.Do(func() { close(done) }) }
+	var once sync.Once
+	closeDone := func() {
+		once.Do(func() {
+			close(done)
+			_ = rawConn.Close()
+		})
+	}
 
 	go func() {
 		defer closeDone()
@@ -203,8 +221,7 @@ var once sync.Once
 		for {
 			n, err := p.Read(buf)
 			if n > 0 {
-				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if werr := conn.WriteJSON(map[string]any{"type": "output", "data": string(buf[:n])}); werr != nil {
+				if werr := conn.json(map[string]any{"type": "output", "data": string(buf[:n])}); werr != nil {
 					return
 				}
 			}
@@ -219,19 +236,19 @@ var once sync.Once
 		if err != nil {
 			log.Printf("[pty] wait: %v", err)
 		}
-		_ = conn.WriteJSON(map[string]any{"type": "exit", "code": code})
+		_ = conn.json(map[string]any{"type": "exit", "code": code})
 		closeDone()
 	}()
 
-	conn.SetReadLimit(8 << 20)
+	rawConn.SetReadLimit(8 << 20)
 	for {
 		select {
 		case <-done:
 			return
 		default:
 		}
-		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
-		_, raw, err := conn.ReadMessage()
+		_ = rawConn.SetReadDeadline(time.Now().Add(5 * time.Minute))
+		_, raw, err := rawConn.ReadMessage()
 		if err != nil {
 			return
 		}
@@ -257,7 +274,7 @@ var once sync.Once
 				}
 			}
 		case "ping":
-			_ = conn.WriteJSON(map[string]any{"type": "pong"})
+			_ = conn.json(map[string]any{"type": "pong"})
 		}
 	}
 }
