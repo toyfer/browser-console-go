@@ -108,8 +108,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	cfg.Path = path
-	if err := cfg.Validate();
-		err != nil {
+	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
