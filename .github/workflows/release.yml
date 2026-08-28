@@ -30,6 +30,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Resolve modules
+        shell: pwsh
+        run: |
+          go get github.com/gorilla/websocket@v1.5.3
+          go get github.com/UserExistsError/conpty@aff362cbe133d2e0818f6eeaffd66c84957a0cf1
+          go mod download
       - name: Vendor xterm
         shell: pwsh
         run: .\scripts\vendor-xterm.ps1
