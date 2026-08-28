@@ -1,0 +1,23 @@
+?   	github.com/toyfer/browser-console-go/cmd/browser-console	[no test files]
+?   	github.com/toyfer/browser-console-go/internal/pty	[no test files]
+?   	github.com/toyfer/browser-console-go/internal/server	[no test files]
+=== RUN   TestParseDefaults
+--- PASS: TestParseDefaults (0.00s)
+=== RUN   TestParseFull
+--- PASS: TestParseFull (0.00s)
+=== RUN   TestParseRejectsBadJSON
+--- PASS: TestParseRejectsBadJSON (0.00s)
+PASS
+ok  	github.com/toyfer/browser-console-go/internal/config	0.022s
+=== RUN   TestIndexHTMLLocalAssets
+--- PASS: TestIndexHTMLLocalAssets (0.00s)
+PASS
+ok  	github.com/toyfer/browser-console-go/internal/ui	0.022s
+=== RUN   TestQuotePlain
+--- PASS: TestQuotePlain (0.00s)
+=== RUN   TestQuoteSpace
+--- PASS: TestQuoteSpace (0.00s)
+=== RUN   TestCommandLine
+--- PASS: TestCommandLine (0.00s)
+PASS
+ok  	github.com/toyfer/browser-console-go/internal/winquote	0.019s
