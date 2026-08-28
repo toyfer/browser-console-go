@@ -1,0 +1,4 @@
+internal\server\server.go:20:2: no required module provides package github.com/gorilla/websocket; to add it:
+	go get github.com/gorilla/websocket
+internal\pty\session_windows.go:9:2: no required module provides package github.com/UserExistsError/conpty; to add it:
+	go get github.com/UserExistsError/conpty
