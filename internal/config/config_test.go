@@ -199,7 +199,7 @@ func TestLoadFallbackWriteFailureKeepsInMemoryDefaults(t *testing.T) {
 		t.Fatalf("write failure must degrade to in-memory defaults: %v", err)
 	}
 	if cfg.Path != "" {
-		t.Fatalf("path = %q, want """, cfg.Path)
+		t.Fatalf("path = %q, want empty string", cfg.Path)
 	}
 	if !cfg.Server.OpenBrowser {
 		t.Fatal("in-memory fallback should keep openBrowser=true")
