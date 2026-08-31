@@ -51,3 +51,20 @@ func TestIndexHTMLEmbedConsoleOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexHTMLHeadlessSocketReassignable(t *testing.T) {
+	cfg, err := config.Parse([]byte(`{"console":{"show":false,"debug":false}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := IndexHTML(cfg)
+	if !strings.Contains(html, "let socket = null;") {
+		t.Error("headless socket must be declared with let so onclose can clear it")
+	}
+	if strings.Contains(html, "const socket = null;") {
+		t.Error("headless socket must not be const (Assignment to constant variable)")
+	}
+	if !strings.Contains(html, "noReconnect") {
+		t.Error("missing noReconnect flag for show=false sessions")
+	}
+}

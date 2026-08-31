@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 )
@@ -17,7 +18,7 @@ type Config struct {
 	Path      string            `json:"-"`
 	Shell     string            `json:"shell"`
 	ShellArgs []string          `json:"shellArgs"`
-	Cwd       string            `json:"cwd"`
+	Cwd       string            `json:"cwd,omitempty"`
 	Env       map[string]string `json:"env"`
 	Server    Server            `json:"server"`
 	Pty       Pty               `json:"pty"`
@@ -47,12 +48,12 @@ type UI struct {
 // Console controls how the browser console panel is shown and how the shell
 // process is tied to the lifetime of the page.
 type Console struct {
-	// Show renders the terminal panel. When Show is false and Debug is false,
-	// the page runs the shell headless and the process is killed as soon as the
-	// tab is closed (no auto-reconnect).
+	// Show renders the terminal panel. Sessions with Show=false are tied to
+	// the page: they never auto-reconnect, so the shell process is killed as
+	// soon as the tab is closed (regardless of Debug).
 	Show bool `json:"show"`
-	// Debug forces the terminal panel to be shown (overriding Show) and adds a
-	// small debug banner. Handy for inspecting a headless session.
+	// Debug shows a debug banner; when Show is false it force-renders the
+	// terminal panel so a headless session can be inspected.
 	Debug bool `json:"debug"`
 }
 
@@ -61,7 +62,7 @@ type Console struct {
 func Default() *Config {
 	return &Config{
 		Shell:     defaultShell(),
-		ShellArgs: nil,
+		ShellArgs: []string{},
 		Env:       map[string]string{},
 		Server:    Server{Host: "127.0.0.1", Port: 8080, OpenBrowser: false},
 		Pty:       Pty{Cols: 120, Rows: 30},
@@ -76,17 +77,31 @@ func defaultShell() string {
 	if runtime.GOOS != "windows" {
 		return "/bin/bash"
 	}
-	candidates := []string{
+	// PowerShell 7+ (pwsh.exe) is NOT under System32\WindowsPowerShell; look
+	// it up on PATH and in the standard per-machine install location first.
+	if p, err := exec.LookPath("pwsh.exe"); err == nil && p != "" {
+		return p
+	}
+	if pf := os.Getenv("ProgramFiles"); pf != "" {
+		if p := filepath.Join(pf, "PowerShell", "7", "pwsh.exe"); fileExists(p) {
+			return p
+		}
+	}
+	shellCandidates := []string{
 		`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
-		`C:\Windows\System32\WindowsPowerShell\v1.0\pwsh.exe`,
 		`C:\Windows\System32\cmd.exe`,
 	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
+	for _, c := range shellCandidates {
+		if fileExists(c) {
 			return c
 		}
 	}
-	return candidates[0]
+	return shellCandidates[0]
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
 }
 
 func exeDir() string {
@@ -147,7 +162,9 @@ func DefaultPath() string {
 	return filepath.Join(exeDir(), "shell.json")
 }
 
-// Save writes the config as indented JSON to path.
+// Save writes the config as indented JSON to path. It always writes
+// "shellArgs" as an array (never null) and omits an empty "cwd", so generated
+// files stay close to the shipped example.
 func (c *Config) Save(path string) error {
 	raw, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
@@ -159,23 +176,14 @@ func (c *Config) Save(path string) error {
 // Load reads the first available config file. If none is found it falls back
 // to built-in defaults and best-effort creates a shell.json next to the
 // executable so the user can discover and edit it. If the file cannot be
-// written, it keeps running with the in-memory default config.
+// written, it keeps running with the in-memory default config. The fallback
+// config is validated the same way as an explicit file, before anything is
+// written, so an unusable default fails fast instead of leaving a broken
+// shell.json behind.
 func Load() (*Config, error) {
 	path, err := FindPath()
 	if err != nil {
-		cfg := Default()
-		defaultPath := DefaultPath()
-		if werr := cfg.Save(defaultPath); werr != nil {
-			log.Printf("[config] no shell.json found; using in-memory defaults (could not write %s: %v)", defaultPath, werr)
-			cfg.Path = ""
-			return cfg, nil
-		}
-		log.Printf("[config] no shell.json found; wrote default config to %s", defaultPath)
-		cfg.Path = defaultPath
-		if verr := cfg.Validate(); verr != nil {
-			return cfg, verr
-		}
-		return cfg, nil
+		return loadFallback(DefaultPath())
 	}
 
 	raw, err := os.ReadFile(path)
@@ -190,6 +198,27 @@ func Load() (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	return cfg, nil
+}
+
+// loadFallback builds the default config and persists it to defaultPath.
+// Both branches (file written or not) return a validated config, matching the
+// file-present path in Load().
+func loadFallback(defaultPath string) (*Config, error) {
+	cfg := Default()
+	// Match the shipped example: a generated config is meant for double-click
+	// use, so opening the browser is the expected UX.
+	cfg.Server.OpenBrowser = true
+	if verr := cfg.Validate(); verr != nil {
+		return nil, fmt.Errorf("no shell.json found and default config is invalid: %w", verr)
+	}
+	if werr := cfg.Save(defaultPath); werr != nil {
+		log.Printf("[config] no shell.json found; using in-memory defaults (could not write %s: %v)", defaultPath, werr)
+		cfg.Path = ""
+		return cfg, nil
+	}
+	log.Printf("[config] no shell.json found; wrote default config to %s", defaultPath)
+	cfg.Path = defaultPath
 	return cfg, nil
 }
 

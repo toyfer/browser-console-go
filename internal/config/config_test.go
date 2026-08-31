@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -71,6 +72,9 @@ func TestDefaultConsoleVisible(t *testing.T) {
 	if cfg.Server.Host != "127.0.0.1" || cfg.Server.Port != 8080 {
 		t.Fatalf("default server = %+v", cfg.Server)
 	}
+	if cfg.Shell == "" {
+		t.Fatal("default shell is empty")
+	}
 }
 
 func TestParseConsoleOptions(t *testing.T) {
@@ -109,5 +113,56 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 	if cfg2.Server.Port != cfg.Server.Port {
 		t.Fatalf("server.port lost: %d != %d", cfg2.Server.Port, cfg.Server.Port)
+	}
+}
+
+func TestLoadFallbackWritesDefault(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "shell.json")
+
+	cfg, err := loadFallback(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Path != p {
+		t.Fatalf("path = %q, want %q", cfg.Path, p)
+	}
+	if !cfg.Server.OpenBrowser {
+		t.Fatal("generated config should open the browser (matches shipped example)")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("fallback config invalid: %v", err)
+	}
+
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	if strings.Contains(s, `"cwd"`) {
+		t.Error("generated file should omit empty cwd")
+	}
+	if strings.Contains(s, `"shellArgs": null`) {
+		t.Error("generated file should use [] for shellArgs, not null")
+	}
+	if !strings.Contains(s, `"console"`) {
+		t.Error("generated file should include the console section")
+	}
+	if !strings.Contains(s, `"openBrowser": true`) {
+		t.Error(`generated file should contain "openBrowser": true`)
+	}
+
+	cfg2, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg2.Server.OpenBrowser {
+		t.Error("openBrowser lost in round-trip")
+	}
+	if cfg2.Console.Show != cfg.Console.Show || cfg2.Console.Debug != cfg.Console.Debug {
+		t.Errorf("console lost in round-trip: %+v", cfg2.Console)
+	}
+	if err := cfg2.Validate(); err != nil {
+		t.Fatalf("round-tripped config invalid: %v", err)
 	}
 }

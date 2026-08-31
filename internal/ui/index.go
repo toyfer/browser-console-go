@@ -54,6 +54,7 @@ func IndexHTML(cfg *config.Config) string {
     background: #3b78ff; color: #fff; padding: 4px 8px;
     font: 12px/1.5 monospace;
   }
+  body.console-debug #terminal { top: 26px; }
 </style>
 </head>
 <body>
@@ -73,14 +74,6 @@ const Terminal = ctor(window.Terminal, 'Terminal');
 const FitAddon = ctor(window.FitAddon, 'FitAddon');
 const WebLinksAddon = ctor(window.WebLinksAddon, 'WebLinksAddon');
 const Unicode11Addon = ctor(window.Unicode11Addon, 'Unicode11Addon');
-
-if (!Terminal || !FitAddon || !WebLinksAddon || !Unicode11Addon) {
-  document.body.innerHTML =
-    '<pre style="color:#e74856;padding:16px;font:14px/1.4 monospace">' +
-    '[error] local xterm assets missing. Rebuild with scripts/vendor-xterm.ps1 so they are embedded.' +
-    '</pre>';
-  return;
-}
 
 const BOOT = {
   fontFamily: %s,
@@ -109,15 +102,33 @@ function start() {
   const hidden = BOOT.consoleShow === false;
   const debug = BOOT.consoleDebug === true;
 
+  // Headless check comes FIRST: it must not depend on the xterm vendor
+  // assets, so the shell is still spawned via /ws when assets are missing.
   if (hidden && !debug) {
-    // Headless: spawn the shell but show no terminal, and never auto-reconnect
-    // so the process is killed as soon as this tab is closed.
     host.classList.add('console-hidden');
     host.innerHTML = '<div class="hidden-overlay">Console is hidden (console.show=false). Set console.debug=true to view it.</div>';
-    const socket = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
-    socket.onmessage = function () {};
-    socket.onerror = function () {};
-    socket.onclose = function () { socket = null; };
+    let socket = null;
+    const overlay = host.querySelector('.hidden-overlay');
+    const setStatus = function (msg) {
+      if (overlay) overlay.textContent = 'Console is hidden (console.show=false). ' + msg;
+    };
+    try {
+      socket = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
+    } catch (e) {
+      setStatus('failed to open WebSocket (' + e + ')');
+      return;
+    }
+    socket.onmessage = function () {}; // headless: server output is ignored
+    socket.onerror = function () { setStatus('WebSocket error.'); };
+    socket.onclose = function () { socket = null; setStatus('WebSocket closed.'); };
+    return;
+  }
+
+  if (!Terminal || !FitAddon || !WebLinksAddon || !Unicode11Addon) {
+    document.body.innerHTML =
+      '<pre style="color:#e74856;padding:16px;font:14px/1.4 monospace">' +
+      '[error] local xterm assets missing. Rebuild with scripts/vendor-xterm.ps1 so they are embedded.' +
+      '</pre>';
     return;
   }
 
@@ -125,9 +136,15 @@ function start() {
     document.body.classList.add('console-debug');
     const banner = document.createElement('div');
     banner.className = 'debug-banner';
-    banner.textContent = 'debug: console shown (console.show=false is overridden by console.debug=true)';
+    banner.textContent = hidden
+      ? 'debug: showing hidden console (console.show=false is overridden by console.debug=true)'
+      : 'debug: console debug mode (console.show=true)';
     document.body.prepend(banner);
   }
+
+  // show=false sessions are tied to this page: never auto-reconnect, so the
+  // shell process dies when the tab is closed (server closes the PTY).
+  const noReconnect = hidden;
 
   const termOptions = {
     fontFamily: BOOT.fontFamily,
@@ -234,7 +251,7 @@ function start() {
 
     socket.onclose = function () {
       if (ws === socket) ws = null;
-      if (intentionalClose) return;
+      if (intentionalClose || noReconnect) return;
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, 1200);
     };
