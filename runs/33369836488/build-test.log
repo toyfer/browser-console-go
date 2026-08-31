@@ -1,0 +1,43 @@
+?   	github.com/toyfer/browser-console-go/cmd/browser-console	[no test files]
+?   	github.com/toyfer/browser-console-go/internal/pty	[no test files]
+?   	github.com/toyfer/browser-console-go/internal/server	[no test files]
+=== RUN   TestParseDefaults
+--- PASS: TestParseDefaults (0.00s)
+=== RUN   TestParseFull
+--- PASS: TestParseFull (0.00s)
+=== RUN   TestParseRejectsBadJSON
+--- PASS: TestParseRejectsBadJSON (0.00s)
+=== RUN   TestDefaultConsoleVisible
+--- PASS: TestDefaultConsoleVisible (0.00s)
+=== RUN   TestParseConsoleOptions
+--- PASS: TestParseConsoleOptions (0.00s)
+=== RUN   TestSaveRoundTrip
+--- PASS: TestSaveRoundTrip (0.00s)
+=== RUN   TestSaveLeavesNoTmpFileBehind
+--- PASS: TestSaveLeavesNoTmpFileBehind (0.00s)
+=== RUN   TestLoadFallbackWritesDefault
+2026/08/31 07:48:09 [config] no shell.json found; wrote default config to C:\Users\RUNNER~1\AppData\Local\Temp\TestLoadFallbackWritesDefault1933038644\001\shell.json
+--- PASS: TestLoadFallbackWritesDefault (0.03s)
+=== RUN   TestLoadFallbackWriteFailureKeepsInMemoryDefaults
+2026/08/31 07:48:09 [config] no shell.json found; using in-memory defaults (could not write C:\Users\RUNNER~1\AppData\Local\Temp\TestLoadFallbackWriteFailureKeepsInMemoryDefaults467909312\001\shell.json: rename C:\Users\RUNNER~1\AppData\Local\Temp\TestLoadFallbackWriteFailureKeepsInMemoryDefaults467909312\001\shell.json.tmp C:\Users\RUNNER~1\AppData\Local\Temp\TestLoadFallbackWriteFailureKeepsInMemoryDefaults467909312\001\shell.json: Access is denied.)
+--- PASS: TestLoadFallbackWriteFailureKeepsInMemoryDefaults (0.00s)
+=== RUN   TestValidateAcceptsAllConsoleModes
+--- PASS: TestValidateAcceptsAllConsoleModes (0.00s)
+PASS
+ok  	github.com/toyfer/browser-console-go/internal/config	0.066s
+=== RUN   TestIndexHTMLLocalAssets
+--- PASS: TestIndexHTMLLocalAssets (0.00s)
+=== RUN   TestIndexHTMLEmbedConsoleOptions
+--- PASS: TestIndexHTMLEmbedConsoleOptions (0.00s)
+=== RUN   TestIndexHTMLHeadlessSocketReassignable
+--- PASS: TestIndexHTMLHeadlessSocketReassignable (0.00s)
+PASS
+ok  	github.com/toyfer/browser-console-go/internal/ui	0.020s
+=== RUN   TestQuotePlain
+--- PASS: TestQuotePlain (0.00s)
+=== RUN   TestQuoteSpace
+--- PASS: TestQuoteSpace (0.00s)
+=== RUN   TestCommandLine
+--- PASS: TestCommandLine (0.00s)
+PASS
+ok  	github.com/toyfer/browser-console-go/internal/winquote	0.016s
