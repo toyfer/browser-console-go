@@ -31,3 +31,40 @@ func TestIndexHTMLLocalAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexHTMLEmbedConsoleOptions(t *testing.T) {
+	cfg, err := config.Parse([]byte(`{"console":{"show":false,"debug":true}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := IndexHTML(cfg)
+	need := []string{
+		"consoleShow",
+		"consoleDebug",
+		"console-hidden",
+		"debug-banner",
+		"Console is hidden (console.show=false)",
+	}
+	for _, s := range need {
+		if !strings.Contains(html, s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+}
+
+func TestIndexHTMLHeadlessSocketReassignable(t *testing.T) {
+	cfg, err := config.Parse([]byte(`{"console":{"show":false,"debug":false}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := IndexHTML(cfg)
+	if !strings.Contains(html, "let socket = null;") {
+		t.Error("headless socket must be declared with let so onclose can clear it")
+	}
+	if strings.Contains(html, "const socket = null;") {
+		t.Error("headless socket must not be const (Assignment to constant variable)")
+	}
+	if !strings.Contains(html, "noReconnect") {
+		t.Error("missing noReconnect flag for show=false sessions")
+	}
+}

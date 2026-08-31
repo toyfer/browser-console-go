@@ -17,6 +17,8 @@ Windows 専用のブラウザ PTY コンソールを **1 バイナリ** にし�
 
 閉域へ持ち込むときは zip をネットありで落としてからフォルダごと。
 
+`shell.json` が見つからない場合、既定設定を検証したうえで **`shell.json` を自動生成**します（書き込みできない場合はメモリ上の既定値でそのまま動作）。生成ファイルは `openBrowser: true` で、ダブルクリック起動の UX に合わせています。
+
 ## shell.json
 
 ```json
@@ -27,6 +29,7 @@ Windows 専用のブラウザ PTY コンソールを **1 バイナリ** にし�
   "env": { "TERM": "xterm-256color", "COLORTERM": "truecolor" },
   "server": { "host": "127.0.0.1", "port": 8080, "openBrowser": true },
   "pty": { "cols": 120, "rows": 30 },
+  "console": { "show": true, "debug": false },
   "ui": {
     "fontFamily": "Consolas, Cascadia Mono, MS Gothic, BIZ UDGothic, monospace",
     "fontSize": 15,
@@ -40,6 +43,21 @@ Windows 専用のブラウザ PTY コンソールを **1 バイナリ** にし�
 - `shell` は絶対パス
 - 探索順: exe と同じディレクトリ → cwd
 - ファイル名: `shell.json` / `shell.config.json` / `config.json`
+
+### console オプション
+
+| オプション | 既定 | 説明 |
+|---|---|---|
+| `show` | `true` | ブラウザ上でコンソールパネルを表示するか。`false` で非表示（ヘッドレス実行） |
+| `debug` | `false` | デバッグ用バナーを表示。`show=false` と組み合わせると非表示セッションを強制表示できる |
+
+- `show=false` のセッションは**タブに紐づきます**: 自動再接続しないため、**タブを閉じるとシェルプロセスが終了**します（`debug=true` で表示していても同様）。
+- `show=false` かつ `debug=false` のときは、パネルの代わりに説明用のオーバーレイを表示します。この経路は xterm アセットに依存しないため、vendor 欠落時でもシェルは起動します。
+- `debug=true` のバナー文言は実際の状態を反映します（`show` の値で切り替わります）。
+
+### 自動生成される shell.json
+
+自動生成ファイルは同梱の例とほぼ同じ形です（`openBrowser: true`、`shellArgs: []`、`cwd` は空なら省略）。既定シェルは `pwsh.exe`（PATH / `%ProgramFiles%\PowerShell\7`）→ `powershell.exe` → `cmd.exe` の順で実在するものを採用します。
 
 ## 操作
 
