@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseDefaults(t *testing.T) {
 	cfg, err := Parse([]byte(`{}`))
@@ -56,5 +60,54 @@ func TestParseFull(t *testing.T) {
 func TestParseRejectsBadJSON(t *testing.T) {
 	if _, err := Parse([]byte(`{`)); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestDefaultConsoleVisible(t *testing.T) {
+	cfg := Default()
+	if !cfg.Console.Show || cfg.Console.Debug {
+		t.Fatalf("default console = %+v", cfg.Console)
+	}
+	if cfg.Server.Host != "127.0.0.1" || cfg.Server.Port != 8080 {
+		t.Fatalf("default server = %+v", cfg.Server)
+	}
+}
+
+func TestParseConsoleOptions(t *testing.T) {
+	cfg, err := Parse([]byte(`{"console":{"show":false,"debug":true}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Console.Show || !cfg.Console.Debug {
+		t.Fatalf("console = %+v", cfg.Console)
+	}
+
+	ui := cfg.PublicUI()
+	if ui["consoleShow"] != false || ui["consoleDebug"] != true {
+		t.Fatalf("public console = %+v", ui)
+	}
+}
+
+func TestSaveRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "shell.json")
+	cfg := Default()
+	cfg.Console.Debug = true
+	if err := cfg.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg2, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg2.Console.Show || !cfg2.Console.Debug {
+		t.Fatalf("console lost in round-trip: %+v", cfg2.Console)
+	}
+	if cfg2.Server.Port != cfg.Server.Port {
+		t.Fatalf("server.port lost: %d != %d", cfg2.Server.Port, cfg.Server.Port)
 	}
 }
