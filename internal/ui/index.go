@@ -44,6 +44,16 @@ func IndexHTML(cfg *config.Config) string {
     font-feature-settings: "liga" 0, "calt" 0;
     text-rendering: geometricPrecision;
   }
+  .console-hidden .hidden-overlay {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%%; box-sizing: border-box; padding: 24px; text-align: center;
+    color: #888; font: 14px/1.6 monospace;
+  }
+  .debug-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    background: #3b78ff; color: #fff; padding: 4px 8px;
+    font: 12px/1.5 monospace;
+  }
 </style>
 </head>
 <body>
@@ -77,6 +87,8 @@ const BOOT = {
   fontSize: %s,
   fontWeight: %s,
   lineHeight: %s,
+  consoleShow: %s,
+  consoleDebug: %s,
   windowsPty: { backend: 'conpty', buildNumber: 22621 },
   theme: {
     background: %s,
@@ -93,6 +105,30 @@ const BOOT = {
 };
 
 function start() {
+  const host = document.getElementById('terminal');
+  const hidden = BOOT.consoleShow === false;
+  const debug = BOOT.consoleDebug === true;
+
+  if (hidden && !debug) {
+    // Headless: spawn the shell but show no terminal, and never auto-reconnect
+    // so the process is killed as soon as this tab is closed.
+    host.classList.add('console-hidden');
+    host.innerHTML = '<div class="hidden-overlay">Console is hidden (console.show=false). Set console.debug=true to view it.</div>';
+    const socket = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
+    socket.onmessage = function () {};
+    socket.onerror = function () {};
+    socket.onclose = function () { socket = null; };
+    return;
+  }
+
+  if (debug) {
+    document.body.classList.add('console-debug');
+    const banner = document.createElement('div');
+    banner.className = 'debug-banner';
+    banner.textContent = 'debug: console shown (console.show=false is overridden by console.debug=true)';
+    document.body.prepend(banner);
+  }
+
   const termOptions = {
     fontFamily: BOOT.fontFamily,
     fontSize: BOOT.fontSize,
@@ -125,7 +161,6 @@ function start() {
   term.loadAddon(unicode11);
   try { term.unicode.activeVersion = '11'; } catch (e) { console.warn('unicode11', e); }
 
-  const host = document.getElementById('terminal');
   term.open(host);
 
   let ws = null;
@@ -264,6 +299,8 @@ function boot() {
       if (typeof j.fontSize === 'number' && j.fontSize > 0) BOOT.fontSize = j.fontSize;
       if (j.fontWeight) BOOT.fontWeight = j.fontWeight;
       if (typeof j.lineHeight === 'number' && j.lineHeight > 0) BOOT.lineHeight = j.lineHeight;
+      if (typeof j.consoleShow === 'boolean') BOOT.consoleShow = j.consoleShow;
+      if (typeof j.consoleDebug === 'boolean') BOOT.consoleDebug = j.consoleDebug;
     }
   }).catch(function () {}).then(function () {
     if (!document.fonts) {
@@ -285,5 +322,5 @@ boot();
 })();
 </script>
 </body>
-</html>`, bg, fontFamily, strconv.FormatFloat(cfg.UI.FontSize, 'f', -1, 64), fontWeight, strconv.FormatFloat(cfg.UI.LineHeight, 'f', -1, 64), bgJ, fgJ, cursorJ, bgJ, selJ)
+</html>`, bg, fontFamily, strconv.FormatFloat(cfg.UI.FontSize, 'f', -1, 64), fontWeight, strconv.FormatFloat(cfg.UI.LineHeight, 'f', -1, 64), strconv.FormatBool(cfg.Console.Show), strconv.FormatBool(cfg.Console.Debug), bgJ, fgJ, cursorJ, bgJ, selJ)
 }
