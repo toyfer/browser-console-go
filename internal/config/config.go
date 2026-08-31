@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,6 +22,7 @@ type Config struct {
 	Server    Server            `json:"server"`
 	Pty       Pty               `json:"pty"`
 	UI        UI                `json:"ui"`
+	Console   Console           `json:"console"`
 }
 
 type Server struct {
@@ -40,6 +42,51 @@ type UI struct {
 	FontWeight string  `json:"fontWeight"`
 	LineHeight float64 `json:"lineHeight"`
 	Theme      string  `json:"theme"`
+}
+
+// Console controls how the browser console panel is shown and how the shell
+// process is tied to the lifetime of the page.
+type Console struct {
+	// Show renders the terminal panel. When Show is false and Debug is false,
+	// the page runs the shell headless and the process is killed as soon as the
+	// tab is closed (no auto-reconnect).
+	Show bool `json:"show"`
+	// Debug forces the terminal panel to be shown (overriding Show) and adds a
+	// small debug banner. Handy for inspecting a headless session.
+	Debug bool `json:"debug"`
+}
+
+// Default returns a Config populated with built-in defaults. It is used both
+// as the basis for Parse() and as the fallback when no config file is found.
+func Default() *Config {
+	return &Config{
+		Shell:     defaultShell(),
+		ShellArgs: nil,
+		Env:       map[string]string{},
+		Server:    Server{Host: "127.0.0.1", Port: 8080, OpenBrowser: false},
+		Pty:       Pty{Cols: 120, Rows: 30},
+		UI:        UI{FontFamily: DefaultFont, FontSize: 15, FontWeight: "normal", LineHeight: 1.0, Theme: "dark"},
+		Console:   Console{Show: true, Debug: false},
+	}
+}
+
+// defaultShell returns the first existing shell among common Windows shells,
+// or /bin/bash on non-Windows platforms.
+func defaultShell() string {
+	if runtime.GOOS != "windows" {
+		return "/bin/bash"
+	}
+	candidates := []string{
+		`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
+		`C:\Windows\System32\WindowsPowerShell\v1.0\pwsh.exe`,
+		`C:\Windows\System32\cmd.exe`,
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return candidates[0]
 }
 
 func exeDir() string {
@@ -94,11 +141,43 @@ func FindPath() (string, error) {
 	return "", fmt.Errorf("shell.json not found next to the executable or in the working directory")
 }
 
+// DefaultPath returns the path where a default shell.json is created when no
+// config file exists.
+func DefaultPath() string {
+	return filepath.Join(exeDir(), "shell.json")
+}
+
+// Save writes the config as indented JSON to path.
+func (c *Config) Save(path string) error {
+	raw, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o644)
+}
+
+// Load reads the first available config file. If none is found it falls back
+// to built-in defaults and best-effort creates a shell.json next to the
+// executable so the user can discover and edit it. If the file cannot be
+// written, it keeps running with the in-memory default config.
 func Load() (*Config, error) {
 	path, err := FindPath()
 	if err != nil {
-		return nil, err
+		cfg := Default()
+		defaultPath := DefaultPath()
+		if werr := cfg.Save(defaultPath); werr != nil {
+			log.Printf("[config] no shell.json found; using in-memory defaults (could not write %s: %v)", defaultPath, werr)
+			cfg.Path = ""
+			return cfg, nil
+		}
+		log.Printf("[config] no shell.json found; wrote default config to %s", defaultPath)
+		cfg.Path = defaultPath
+		if verr := cfg.Validate(); verr != nil {
+			return cfg, verr
+		}
+		return cfg, nil
 	}
+
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
@@ -123,34 +202,13 @@ func Parse(raw []byte) (*Config, error) {
 		Server    any `json:"server"`
 		Pty       any `json:"pty"`
 		UI        any `json:"ui"`
+		Console   any `json:"console"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, err
 	}
 
-	defaultShell := `C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
-	if runtime.GOOS != "windows" {
-		defaultShell = "/bin/bash"
-	}
-
-	cfg := &Config{
-		Shell:     defaultShell,
-		ShellArgs: nil,
-		Env:       map[string]string{},
-		Server: Server{
-			Host:        "127.0.0.1",
-			Port:        8080,
-			OpenBrowser: false,
-		},
-		Pty: Pty{Cols: 120, Rows: 30},
-		UI: UI{
-			FontFamily: DefaultFont,
-			FontSize:   15,
-			FontWeight: "normal",
-			LineHeight: 1.0,
-			Theme:      "dark",
-		},
-	}
+	cfg := Default()
 
 	if s, ok := parsed.Shell.(string); ok && s != "" {
 		cfg.Shell = s
@@ -210,6 +268,14 @@ func Parse(raw []byte) (*Config, error) {
 			cfg.UI.Theme = "light"
 		}
 	}
+	if m, ok := parsed.Console.(map[string]any); ok {
+		if b, ok := m["show"].(bool); ok {
+			cfg.Console.Show = b
+		}
+		if b, ok := m["debug"].(bool); ok {
+			cfg.Console.Debug = b
+		}
+	}
 	return cfg, nil
 }
 
@@ -250,12 +316,14 @@ func (c *Config) URL() string {
 
 func (c *Config) PublicUI() map[string]any {
 	return map[string]any{
-		"fontFamily": c.UI.FontFamily,
-		"fontSize":   c.UI.FontSize,
-		"fontWeight": c.UI.FontWeight,
-		"lineHeight": c.UI.LineHeight,
-		"theme":      c.UI.Theme,
-		"ptyBackend": "conpty",
+		"fontFamily":   c.UI.FontFamily,
+		"fontSize":     c.UI.FontSize,
+		"fontWeight":   c.UI.FontWeight,
+		"lineHeight":   c.UI.LineHeight,
+		"theme":        c.UI.Theme,
+		"ptyBackend":   "conpty",
+		"consoleShow":  c.Console.Show,
+		"consoleDebug": c.Console.Debug,
 	}
 }
 
