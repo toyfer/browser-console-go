@@ -15,6 +15,10 @@
     "cols": 120,
     "rows": 30
   },
+  "console": {
+    "show": true,
+    "debug": false
+  },
   "ui": {
     "fontFamily": "Consolas, Cascadia Mono, MS Gothic, BIZ UDGothic, monospace",
     "fontSize": 15,

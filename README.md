@@ -17,6 +17,8 @@ Windows 専用のブラウザ PTY コンソールを **1 バイナリ** にし�
 
 閉域へ持ち込むときは zip をネットありで落としてからフォルダごと。
 
+`shell.json` が見つからない場合、起動時に既定設定で **`shell.json` を自動生成**します（書き込みできない場合はメモリ上の既定値でそのまま動作）。
+
 ## shell.json
 
 ```json
@@ -27,6 +29,7 @@ Windows 専用のブラウザ PTY コンソールを **1 バイナリ** にし�
   "env": { "TERM": "xterm-256color", "COLORTERM": "truecolor" },
   "server": { "host": "127.0.0.1", "port": 8080, "openBrowser": true },
   "pty": { "cols": 120, "rows": 30 },
+  "console": { "show": true, "debug": false },
   "ui": {
     "fontFamily": "Consolas, Cascadia Mono, MS Gothic, BIZ UDGothic, monospace",
     "fontSize": 15,
@@ -40,6 +43,16 @@ Windows 専用のブラウザ PTY コンソールを **1 バイナリ** にし�
 - `shell` は絶対パス
 - 探索順: exe と同じディレクトリ → cwd
 - ファイル名: `shell.json` / `shell.config.json` / `config.json`
+
+### console オプション
+
+| オプション | 既定 | 説明 |
+|---|---|---|
+| `show` | `true` | ブラウザ上でコンソールパネルを表示するか。`false` で非表示（ヘッドレス実行） |
+| `debug` | `false` | `true` にすると `show=false` でもパネルを強制表示し、デバッグ用バナーを追加 |
+
+- `show=false` かつ `debug=false` のとき、シェルプロセスは起動しますがパネルは表示されず、**タブを閉じるとプロセスが終了**します（自動再接続しないため）。
+- デバッグしたいときは `debug=true` にするとパネルが表示され、バナーが付きます。
 
 ## 操作
 

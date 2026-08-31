@@ -31,3 +31,23 @@ func TestIndexHTMLLocalAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexHTMLEmbedConsoleOptions(t *testing.T) {
+	cfg, err := config.Parse([]byte(`{"console":{"show":false,"debug":true}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := IndexHTML(cfg)
+	need := []string{
+		"consoleShow",
+		"consoleDebug",
+		"console-hidden",
+		"debug-banner",
+		"Console is hidden (console.show=false)",
+	}
+	for _, s := range need {
+		if !strings.Contains(html, s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+}
