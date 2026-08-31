@@ -165,12 +165,26 @@ func DefaultPath() string {
 // Save writes the config as indented JSON to path. It always writes
 // "shellArgs" as an array (never null) and omits an empty "cwd", so generated
 // files stay close to the shipped example.
+//
+// The write is atomic: the JSON goes to path+".tmp" first and is renamed into
+// place, so a crash or a full disk mid-write can never leave a truncated
+// shell.json behind. A broken file would fail to parse on the next start and
+// defeat the no-config fallback (FindPath would see the file and never reach
+// the fallback path), so atomicity matters for the generated file, too.
 func (c *Config) Save(path string) error {
 	raw, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, raw, 0o644)
+	tmp := path + ".tmp"
+	if werr := os.WriteFile(tmp, raw, 0o644); werr != nil {
+		return werr
+	}
+	if rerr := os.Rename(tmp, path); rerr != nil {
+		_ = os.Remove(tmp)
+		return rerr
+	}
+	return nil
 }
 
 // Load reads the first available config file. If none is found it falls back
@@ -309,6 +323,9 @@ func Parse(raw []byte) (*Config, error) {
 }
 
 func (c *Config) Validate() error {
+	// Note: Console.Show / Console.Debug need no validation. Both are plain
+	// booleans and every combination is a supported mode (Show=false with
+	// Debug=true is the documented way to inspect a headless session).
 	if c.Shell == "" {
 		return fmt.Errorf("shell is empty")
 	}

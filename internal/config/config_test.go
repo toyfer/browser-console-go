@@ -114,6 +114,23 @@ func TestSaveRoundTrip(t *testing.T) {
 	if cfg2.Server.Port != cfg.Server.Port {
 		t.Fatalf("server.port lost: %d != %d", cfg2.Server.Port, cfg.Server.Port)
 	}
+	if _, err := os.Stat(p + ".tmp"); !os.IsNotExist(err) {
+		t.Fatal("Save must not leave a .tmp file behind")
+	}
+}
+
+func TestSaveLeavesNoTmpFileBehind(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "shell.json")
+	if err := Default().Save(p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("shell.json not written: %v", err)
+	}
+	if _, err := os.Stat(p + ".tmp"); !os.IsNotExist(err) {
+		t.Fatalf("temporary file must not survive Save: %v", err)
+	}
 }
 
 func TestLoadFallbackWritesDefault(t *testing.T) {
@@ -164,5 +181,51 @@ func TestLoadFallbackWritesDefault(t *testing.T) {
 	}
 	if err := cfg2.Validate(); err != nil {
 		t.Fatalf("round-tripped config invalid: %v", err)
+	}
+}
+
+// TestLoadFallbackWriteFailureKeepsInMemoryDefaults covers the branch where
+// the generated shell.json cannot be persisted (e.g. read-only install dir).
+// A directory at the target path makes the write fail on every platform.
+func TestLoadFallbackWriteFailureKeepsInMemoryDefaults(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "shell.json")
+	if err := os.Mkdir(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadFallback(p)
+	if err != nil {
+		t.Fatalf("write failure must degrade to in-memory defaults: %v", err)
+	}
+	if cfg.Path != "" {
+		t.Fatalf("path = %q, want """, cfg.Path)
+	}
+	if !cfg.Server.OpenBrowser {
+		t.Fatal("in-memory fallback should keep openBrowser=true")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("in-memory fallback config invalid: %v", err)
+	}
+	if _, err := os.Stat(p + ".tmp"); !os.IsNotExist(err) {
+		t.Fatalf("temporary file left behind after failed save: %v", err)
+	}
+}
+
+// TestValidateAcceptsAllConsoleModes locks in that every Show/Debug
+// combination is a supported mode; see the note in Validate().
+func TestValidateAcceptsAllConsoleModes(t *testing.T) {
+	modes := []Console{
+		{Show: true, Debug: false},
+		{Show: false, Debug: false},
+		{Show: false, Debug: true},
+		{Show: true, Debug: true},
+	}
+	for _, m := range modes {
+		cfg := Default()
+		cfg.Console = m
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("validate console %+v: %v", m, err)
+		}
 	}
 }
